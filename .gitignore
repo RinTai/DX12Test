@@ -1,0 +1,4 @@
+ .vs/ *.vcxproj.user *.vcxproj.filters *.suo *.user *.cache *.ilk *.pdb *.obj *.log *.tlog *.idb *.dir ipch/ *.aps *.ncb *.opensdf *.sdf
+packages/
+Debug/
+x64/
