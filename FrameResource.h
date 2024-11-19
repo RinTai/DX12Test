@@ -127,6 +127,7 @@ public:
     std::unique_ptr<UploadBuffer<ObjectConstants>> ObjectCB = nullptr;
     std::unique_ptr<UploadBuffer<PassConstantsPixel>> PassCBPixelized = nullptr;
     std::unique_ptr<UploadBuffer<MaterialData>> MaterialBuffer = nullptr;
+    std::unique_ptr<Texture> DepthTexture = nullptr;
     //把命令标记到这个围栏点
     UINT64 Fence = 0;
 };

@@ -12,6 +12,8 @@
 // 
 // 动态索引编译成功了，但是不知道纹理为什么还是不能赋值上去？是内存分配出问题了吗？ - 11.3
 // 
+// 想做成延迟渲染，或者只是绘制阴影图？感觉工作量好大
+// 添加后处理效果中，是屏幕像素化的后处理，感觉还是得自己写管线 -11.19 
 //***************************************************************************************
 #include "d3dUtil.h"
 #include "dxApp.h"
@@ -1395,7 +1397,7 @@ void ShapesApp::BuildPSOs()
     mirrorDSS.StencilReadMask = 0xff;
     mirrorDSS.StencilWriteMask = 0xff;
 
-    //通过深度测试就设置为Ref 1
+    //通过深度测试就设置为Ref 1（REF是自己设置的）
     mirrorDSS.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
     mirrorDSS.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
     mirrorDSS.FrontFace.StencilPassOp = D3D12_STENCIL_OP_REPLACE;
