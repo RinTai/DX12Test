@@ -151,7 +151,10 @@ private:
     void UpdateMaterialBuffers(const GameTimer& gt);
     void UpdateMainPassCB(const GameTimer& gt);
     void UpdateReflectedPassCB(const GameTimer& gt);
-    void UpdatePixelizedPassCB(const GameTimer& gt);//11.18这个是更新自己写那个后处理效果的，我在想也没有更统一的方式，当然后处理的实现，还是那个三角形那个，太天才了
+    void UpdatePixelizedPassCB(const GameTimer& gt);//11.18这个是更新自己写那个后处理效果的，我在想也没有更统一的方式，当然后处理的实现，还是那个三角形那个，太天才了（我还没做，延迟处理阶段还没弄完呢）
+
+    void BuildGbufferPSOs();
+    void BuildGbufferDescriptorHeaps();
 
     void BuildDescriptorHeaps();
     void BuildConstantBufferViews();
@@ -179,9 +182,11 @@ private:
 
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr; 
     ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
-    //srv应该用一个unordered map 每个纹理都有一个SRV
+    //srv应该用一个unordered map 每个纹理都有一个SRV(只是放纹理的)//11.24
     ComPtr<ID3D12DescriptorHeap> mSrvHeap = nullptr;
-    
+    //Gbuffer的Heap
+    ComPtr<ID3D12DescriptorHeap> mGbufferSrvHeap = nullptr;
+    ComPtr<ID3D12DescriptorHeap> mGbufferRtvHeap = nullptr;
 
     std::unordered_map<std::string, std::unique_ptr<MeshGeometry>> mGeometries;
     std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
@@ -725,6 +730,18 @@ void ShapesApp::UpdateReflectedPassCB(const GameTimer& gt)
     // 把光照镜像的渲染过程常量数据存于渲染过程缓冲区索引1的位置
     auto currPassCB = mCurrFrameResource->PassCB.get();
     currPassCB->CopyData(1, mReflectedPassCB);
+}
+/// <summary>
+/// 
+/// </summary>
+void ShapesApp::BuildGbufferDescriptorHeaps()
+{
+    D3D12_DESCRIPTOR_HEAP_DESC GbufferHeapDesc;
+    GbufferHeapDesc.NumDescriptors = 4;
+    GbufferHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    GbufferHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    GbufferHeapDesc.NodeMask = 0;
+    ThrowIfFailed(mDevice->CreateDescriptorHeap(&GbufferHeapDesc, IID_PPV_ARGS(&mGbufferSrvHeap)));
 }
 //这里修改了一下来使用SRV
 void ShapesApp::BuildDescriptorHeaps()
@@ -1318,6 +1335,43 @@ void ShapesApp::BuildSkullGeometry()
     mGeometries[geo->Name] = std::move(geo);
 }
 
+//Gbuffer的PSO
+void ShapesApp::BuildGbufferPSOs()
+{
+    
+    //RTV深度在DSV里就画了，但是光源的Shadow还是需要一个PSO的
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC gBufferPsoDesc;
+    gBufferPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    gBufferPsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    gBufferPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    gBufferPsoDesc.SampleMask = UINT_MAX;
+    gBufferPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; // 绘制三角形
+
+    gBufferPsoDesc.NumRenderTargets = 4;  //法线 位置 颜色 深度
+    gBufferPsoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;//法线
+    gBufferPsoDesc.RTVFormats[1] = DXGI_FORMAT_R32G32B32A32_FLOAT;//位置
+    gBufferPsoDesc.RTVFormats[2] = DXGI_FORMAT_R8G8B8A8_UNORM;//颜色
+    gBufferPsoDesc.RTVFormats[3] = DXGI_FORMAT_D32_FLOAT;// 深度
+    gBufferPsoDesc.SampleDesc.Count =  1;;  // 单倍样本
+    
+    D3D12_BLEND_DESC noBlendDesc = {};
+    noBlendDesc.AlphaToCoverageEnable = FALSE;
+    noBlendDesc.RenderTarget[0].BlendEnable = FALSE;  // 禁用混合
+    noBlendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+    noBlendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
+    noBlendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+    noBlendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+    noBlendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+    noBlendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+
+    gBufferPsoDesc.BlendState = noBlendDesc;
+    gBufferPsoDesc.DSVFormat = mDepthStencilFormat;
+
+    ThrowIfFailed(mDevice->CreateGraphicsPipelineState(&gBufferPsoDesc, IID_PPV_ARGS(&mPSOs["Gbuffer"])));
+    
+}
+
 void ShapesApp::BuildPSOs()
 {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
@@ -1487,7 +1541,7 @@ void ShapesApp::BuildFrameResources()
     for (int i = 0; i < gNumFrameResources; ++i)
     {
         mFrameResources.push_back(std::make_unique<FrameResource>(mDevice.Get(),
-            2, (UINT)mAllRitems.size(),(UINT) mMaterials.size()));
+            2, (UINT)mAllRitems.size(),(UINT) mMaterials.size(),(UINT)mClientWidth,(UINT)mClientHeight));
     }
 }
 void ShapesApp::BuildMaterial()

@@ -114,7 +114,7 @@ struct FrameResource
 {
 public:
 
-    FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount,UINT materialCount);
+    FrameResource(ID3D12Device* device, UINT passCount, UINT objectCount,UINT materialCount,UINT width,UINT height);
     FrameResource(const FrameResource& rhs) = delete;
     FrameResource& operator=(const FrameResource& rhs) = delete;
     ~FrameResource();
@@ -127,7 +127,11 @@ public:
     std::unique_ptr<UploadBuffer<ObjectConstants>> ObjectCB = nullptr;
     std::unique_ptr<UploadBuffer<PassConstantsPixel>> PassCBPixelized = nullptr;
     std::unique_ptr<UploadBuffer<MaterialData>> MaterialBuffer = nullptr;
-    std::unique_ptr<Texture> DepthTexture = nullptr;
+    //Gbuffer的纹理资源
+    std::unique_ptr<TextureBuffer> ColorTexture = nullptr;
+    std::unique_ptr<TextureBuffer> PositionTexture = nullptr;
+    std::unique_ptr<TextureBuffer> NormalTexture = nullptr;
+    std::unique_ptr<TextureBuffer> DepthTexture = nullptr;
     //把命令标记到这个围栏点
     UINT64 Fence = 0;
 };
