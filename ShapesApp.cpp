@@ -365,6 +365,7 @@ void ShapesApp::Draw(const GameTimer& gt)
     D3D12_CPU_DESCRIPTOR_HANDLE tempDsv = DepthStencilView();
     D3D12_CPU_DESCRIPTOR_HANDLE tempRtv = CurrentBackBufferView();
 
+    //清理深度缓冲区和RTV
     mCommandList->ClearRenderTargetView(tempRtv, Colors::LightBlue, 0, nullptr);
     mCommandList->ClearDepthStencilView(tempDsv, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 

@@ -107,7 +107,7 @@ protected:
 	static const int SwapChainBufferCount = 2;
 	int mCurrBackBuffer = 0;
 	Microsoft::WRL::ComPtr<ID3D12Resource> mRenderTargetBuffer[SwapChainBufferCount];//存储RTV的Buffer
-	Microsoft::WRL::ComPtr<ID3D12Resource> mDepthStencilBuffer;
+	Microsoft::WRL::ComPtr<ID3D12Resource> mDepthStencilBuffer;//DSV的纹理 可以这么说吧上面的也是纹理
 
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mRtvHeap;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mDsvHeap;
