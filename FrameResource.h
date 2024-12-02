@@ -132,6 +132,15 @@ public:
     std::unique_ptr<TextureBuffer> PositionTexture = nullptr;
     std::unique_ptr<TextureBuffer> NormalTexture = nullptr;
     std::unique_ptr<TextureBuffer> DepthTexture = nullptr;
+    
+    //Gbuffer的Heap(这里可以调整一下，把RTVHandle 放进TextureBuffer里存储)
+    ComPtr<ID3D12DescriptorHeap> mGbufferSrvHeap = nullptr;
+    ComPtr<ID3D12DescriptorHeap> mGbufferRtvHeap = nullptr;
+    CD3DX12_CPU_DESCRIPTOR_HANDLE GbRtvHandles[4]; //每个纹理在描述符堆中的位置，颜色 位置 法线 深度
+
     //把命令标记到这个围栏点
     UINT64 Fence = 0;
+private:
+    void BuildGbufferHeapsAndRTV(ID3D12Device* device);
 };
+

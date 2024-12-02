@@ -104,10 +104,9 @@ struct PSInput
 PSInput VSMain(VSInput input,uint instanceID : SV_InstanceID)
 {
    PSInput result;
-
-   MaterialData matData = gMaterialData[gMaterialIndex];
     
     InstanceData instanceData = gInstanceData[instanceID];
+    MaterialData matData = gMaterialData[instanceData.MaterialIndex];
     //result.worldPosition = mul(position, Model);
     //result.position = mul(position, MVP);
     //result.texCoord = texCoord;
@@ -118,9 +117,9 @@ PSInput VSMain(VSInput input,uint instanceID : SV_InstanceID)
     result.worldPosition = mul(input.position, instanceData.World);
     result.position = mul(result.worldPosition, VP);
    
-    float4 texC = mul(float4(input.texCoord, 0.0f, 1.0f), gTexTransform);
+    float4 texC = mul(float4(input.texCoord, 0.0f, 1.0f), instanceData.TexTransform);
     result.texCoord = mul(texC, matData.MatTransform).xy;
-    result.normal = mul(input.normal, (float3x3)gWorld);
+    result.normal = mul(input.normal, (float3x3) instanceData.World);
     //result.normal = normal;
 
     return result;

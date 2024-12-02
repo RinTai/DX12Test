@@ -1,6 +1,9 @@
 #pragma once
 
 #include "d3dUtil.h"
+/// <summary>
+/// 本类可以用于只存储Resource 也可以作为Tex的中间变量	
+/// </summary>
 class TextureBuffer
 {
 public:
@@ -8,8 +11,18 @@ public:
 	TextureBuffer(ID3D12Device* device, UINT width, UINT height, DXGI_FORMAT format);
 
 	TextureBuffer(const TextureBuffer& rhs) = delete;
-	TextureBuffer operator =(const TextureBuffer& rhs) = delete;
-	~TextureBuffer() = delete;
+	TextureBuffer operator=(const TextureBuffer& rhs) = delete;
+	~TextureBuffer()
+	{
+		if (mtexBuffer0 != nullptr)
+		{
+			mtexBuffer0->Unmap(0, nullptr);
+		}
+		if (mtexBuffer1 != nullptr)
+		{
+			mtexBuffer1->Unmap(0, nullptr);
+		}
+	}
 
 	ID3D12Resource* Resource();
 

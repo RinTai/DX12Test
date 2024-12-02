@@ -154,7 +154,7 @@ private:
     void UpdatePixelizedPassCB(const GameTimer& gt);//11.18这个是更新自己写那个后处理效果的，我在想也没有更统一的方式，当然后处理的实现，还是那个三角形那个，太天才了（我还没做，延迟处理阶段还没弄完呢）
 
     void BuildGbufferPSOs();
-    void BuildGbufferDescriptorHeaps();
+    void BuildGbufferRootSignature();
 
     void BuildDescriptorHeaps();
     void BuildConstantBufferViews();
@@ -180,13 +180,14 @@ private:
     FrameResource* mCurrFrameResource = nullptr;
     int mCurrFrameResourceIndex = 0;
 
+    //GB的Signature
+    ComPtr<ID3D12RootSignature> mGBSignature = nullptr;
+    //或者整成Unordered_map ?
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr; 
     ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
     //srv应该用一个unordered map 每个纹理都有一个SRV(只是放纹理的)//11.24
     ComPtr<ID3D12DescriptorHeap> mSrvHeap = nullptr;
-    //Gbuffer的Heap
-    ComPtr<ID3D12DescriptorHeap> mGbufferSrvHeap = nullptr;
-    ComPtr<ID3D12DescriptorHeap> mGbufferRtvHeap = nullptr;
+
 
     std::unordered_map<std::string, std::unique_ptr<MeshGeometry>> mGeometries;
     std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
@@ -731,18 +732,7 @@ void ShapesApp::UpdateReflectedPassCB(const GameTimer& gt)
     auto currPassCB = mCurrFrameResource->PassCB.get();
     currPassCB->CopyData(1, mReflectedPassCB);
 }
-/// <summary>
-/// 
-/// </summary>
-void ShapesApp::BuildGbufferDescriptorHeaps()
-{
-    D3D12_DESCRIPTOR_HEAP_DESC GbufferHeapDesc;
-    GbufferHeapDesc.NumDescriptors = 4;
-    GbufferHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    GbufferHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    GbufferHeapDesc.NodeMask = 0;
-    ThrowIfFailed(mDevice->CreateDescriptorHeap(&GbufferHeapDesc, IID_PPV_ARGS(&mGbufferSrvHeap)));
-}
+
 //这里修改了一下来使用SRV
 void ShapesApp::BuildDescriptorHeaps()
 {
@@ -898,6 +888,39 @@ void ShapesApp::LoadTexture()
     mTextures[white1x1Tex->Name] = std::move(white1x1Tex);
 }
 
+void ShapesApp::BuildGbufferRootSignature()
+{
+    CD3DX12_DESCRIPTOR_RANGE gbTable;
+    gbTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 0, 0);//(t0,space0)
+
+    CD3DX12_ROOT_PARAMETER gbRootParameter[4];//和下面一样的要放进去 但是可以把常量删了
+    gbRootParameter[0].InitAsConstantBufferView(1);//PASSCB
+    gbRootParameter[1].InitAsShaderResourceView(0, 1);//Mat(t0,space1)
+    gbRootParameter[2].InitAsShaderResourceView(1, 1);//Instance(t1,space1)
+    gbRootParameter[3].InitAsDescriptorTable(4, &gbTable, D3D12_SHADER_VISIBILITY_PIXEL);
+
+    //采样器
+    auto samplers = GetStaticSamplers();
+
+    CD3DX12_ROOT_SIGNATURE_DESC gbRootSigDesc(4, gbRootParameter,(UINT)samplers.size(), samplers.data(), 
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+    ComPtr<ID3DBlob> serializedRootSig = nullptr;
+    ComPtr<ID3DBlob> errorBlob = nullptr;
+    ThrowIfFailed(D3D12SerializeRootSignature(&gbRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf()));
+
+    if (errorBlob != nullptr)
+    {
+        ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+    }
+
+    ThrowIfFailed(mDevice->CreateRootSignature(
+        0,
+        serializedRootSig->GetBufferPointer(),
+        serializedRootSig->GetBufferSize(),
+        IID_PPV_ARGS(mGBSignature.GetAddressOf())));
+}
+
 void ShapesApp::BuildRootSignature()
 {
     CD3DX12_DESCRIPTOR_RANGE texTable;
@@ -916,11 +939,11 @@ void ShapesApp::BuildRootSignature()
     // 根参数.
     CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 
-    slotRootParameter[0].InitAsConstantBufferView(0);
-    slotRootParameter[1].InitAsConstantBufferView(1);
-    slotRootParameter[2].InitAsShaderResourceView(0, 1);
-    slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL);
-    slotRootParameter[4].InitAsShaderResourceView(1 , 1);
+    slotRootParameter[0].InitAsConstantBufferView(0); //OBJ
+    slotRootParameter[1].InitAsConstantBufferView(1); //PASS 
+    slotRootParameter[2].InitAsShaderResourceView(0, 1); //MATERIAL
+    slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); //TEX
+    slotRootParameter[4].InitAsShaderResourceView(1 , 1); //INSTANCE
 
     // 创建CBV的根参数
      //slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);

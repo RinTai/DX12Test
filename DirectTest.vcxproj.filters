@@ -109,6 +109,9 @@
     <FxCompile Include="Pixelized.hlsl">
       <Filter>资源文件\Shader</Filter>
     </FxCompile>
+    <FxCompile Include="Gbuffer.hlsl">
+      <Filter>资源文件\Shader</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
