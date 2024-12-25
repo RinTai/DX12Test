@@ -75,6 +75,7 @@ protected:
 
 	static DxApp* mApp;
 
+	
 	HINSTANCE mhAppInst = nullptr; // application instance handle
 	HWND      mhMainWnd = nullptr; // main window handle
 	bool      mAppPaused = false;  // is the application paused?
@@ -82,7 +83,7 @@ protected:
 	bool      mMaximized = false;  // is the application maximized?
 	bool      mResizing = false;   // are the resize bars being dragged?
 	bool      mFullscreenState = false;// fullscreen enabled
-
+	bool		mDeferred = false;
 	// 使用MSAA?
 	bool      m4xMsaaState = false;    // 4X MSAA enabled
 	UINT      m4xMsaaQuality = 0;      // quality level of 4X MSAA

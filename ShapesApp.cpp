@@ -155,6 +155,8 @@ private:
 
     void BuildGbufferPSOs();
     void BuildGbufferRootSignature();
+    void BuildLightApplyPSOs();
+    void BuildLightApplyRootSignature();
 
     void BuildDescriptorHeaps();
     void BuildConstantBufferViews();
@@ -182,6 +184,7 @@ private:
 
     //GB的Signature
     ComPtr<ID3D12RootSignature> mGBSignature = nullptr;
+    ComPtr<ID3D12RootSignature> mLASignature = nullptr;
     //或者整成Unordered_map ?
     ComPtr<ID3D12RootSignature> mRootSignature = nullptr; 
     ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
@@ -370,6 +373,8 @@ void ShapesApp::Draw(const GameTimer& gt)
 
     D3D12_CPU_DESCRIPTOR_HANDLE tempDsv = DepthStencilView();
     D3D12_CPU_DESCRIPTOR_HANDLE tempRtv = CurrentBackBufferView();
+    //呃，这个是Gbuffer的 所以我们不需要交换链，但是是可以作为RTV,然后作为SRV传出？
+    D3D12_CPU_DESCRIPTOR_HANDLE tempGbuffer = mFrameResources[mCurrFrameResourceIndex]->GbufferView();
 
     //清理深度缓冲区和RTV
     mCommandList->ClearRenderTargetView(tempRtv, Colors::LightBlue, 0, nullptr);
@@ -377,78 +382,107 @@ void ShapesApp::Draw(const GameTimer& gt)
 
     // 选择绘制的缓冲区
     
-    mCommandList->OMSetRenderTargets(1, &tempRtv, true, &tempDsv);
+    //在这里开始 延迟和 前向区别出现：首先RTV改变，这里不首先用tempRtv，这个放最后去 12.13
+    if (!mDeferred)
+    {
+        mCommandList->OMSetRenderTargets(1, &tempRtv, true, &tempDsv);
 
-    ID3D12DescriptorHeap* descriptorHeaps[] = {mSrvHeap.Get()};
-    mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+        ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvHeap.Get() };
+        mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-    mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
+        mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
-    //int passCbvIndex = mPassCbvOffset + mCurrFrameResourceIndex;
-    //auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
-    //passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
-    //mCommandList->SetGraphicsRootDescriptorTable(1, passCbvHandle);
+        //int passCbvIndex = mPassCbvOffset + mCurrFrameResourceIndex;
+        //auto passCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+        //passCbvHandle.Offset(passCbvIndex, mCbvSrvUavDescriptorSize);
+        //mCommandList->SetGraphicsRootDescriptorTable(1, passCbvHandle);
 
-    UINT passCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
+        UINT passCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
 
-    //使用根描述符的CBV 最新的
-    auto passCB = mCurrFrameResource->PassCB->Resource();
-    mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
+        //使用根描述符的CBV 最新的
+        auto passCB = mCurrFrameResource->PassCB->Resource();
+        mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
 
-    auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-    mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
+        auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+        mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
 
-    mCommandList->SetGraphicsRootDescriptorTable(3, mSrvHeap->GetGPUDescriptorHandleForHeapStart());
+        mCommandList->SetGraphicsRootDescriptorTable(3, mSrvHeap->GetGPUDescriptorHandleForHeapStart());
 
-    DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
 
-    mCommandList->SetPipelineState(mPSOs["highlight"].Get());
-    DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Highlight]);
-    //把模板缓冲区标记为1
-    mCommandList->OMSetStencilRef(1);
-    mCommandList->SetPipelineState(mPSOs["markStencilMirrors"].Get());
+        mCommandList->SetPipelineState(mPSOs["highlight"].Get());
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Highlight]);
+        //把模板缓冲区标记为1
+        mCommandList->OMSetStencilRef(1);
+        mCommandList->SetPipelineState(mPSOs["markStencilMirrors"].Get());
 
-    DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Mirrors]);
-    //只绘制镜子范围的镜像（标记为1的）
-    // 使用两个单独的渲染过程常量缓冲区，一个存储物体镜像，另一个保存光照镜像（这个镜子的实现实际上是画了两个骷髅头，用模板测试的方法来剔除一部分）
-    
-    mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress() + 1 * passCBByteSize);
-    mCommandList->SetPipelineState(mPSOs["drawStencilReflections"].Get());
-    DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Reflected]);
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Mirrors]);
+        //只绘制镜子范围的镜像（标记为1的）
+        // 使用两个单独的渲染过程常量缓冲区，一个存储物体镜像，另一个保存光照镜像（这个镜子的实现实际上是画了两个骷髅头，用模板测试的方法来剔除一部分）
 
-    //恢复主渲染过程
-    mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
-    mCommandList->OMSetStencilRef(0);
+        mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress() + 1 * passCBByteSize);
+        mCommandList->SetPipelineState(mPSOs["drawStencilReflections"].Get());
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Reflected]);
 
-    //绘制镜面，使他与镜像混合
-    mCommandList->SetPipelineState(mPSOs["transparent"].Get());
-    DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Transparent]);
+        //恢复主渲染过程
+        mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
+        mCommandList->OMSetStencilRef(0);
 
-    //绘制阴影
-    mCommandList->SetPipelineState(mPSOs["shadow"].Get());
-    DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Shadow]);
+        //绘制镜面，使他与镜像混合
+        mCommandList->SetPipelineState(mPSOs["transparent"].Get());
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Transparent]);
+
+        //绘制阴影
+        mCommandList->SetPipelineState(mPSOs["shadow"].Get());
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Shadow]);
 
 
-    //从后台显示到前面
-    D3D12_RESOURCE_BARRIER tempUse2(CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-    mCommandList->ResourceBarrier(1, &tempUse2);
+        //从后台显示到前面
+        D3D12_RESOURCE_BARRIER tempUse2(CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+        mCommandList->ResourceBarrier(1, &tempUse2);
 
-    // 关闭
-    ThrowIfFailed(mCommandList->Close());
+        // 关闭
+        ThrowIfFailed(mCommandList->Close());
 
-    //添加到命令队列中执行
-    ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
-    mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+        //添加到命令队列中执行
+        ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
+        mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
 
-    // 交换交换链
-    ThrowIfFailed(mSwapChain->Present(0, 0));
-    mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
+        // 交换交换链
+        ThrowIfFailed(mSwapChain->Present(0, 0));
+        mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
 
-    // 增加围栏值，标记到此围栏点上
-    mCurrFrameResource->Fence = ++mCurrentFence;
+        // 增加围栏值，标记到此围栏点上
+        mCurrFrameResource->Fence = ++mCurrentFence;
 
-    //向队列里添加一条指令，设置新的围栏点，G等待GPU处理完gSignal之前的所有命令
-    mCommandQueue->Signal(mFence.Get(), mCurrentFence);
+        //向队列里添加一条指令，设置新的围栏点，G等待GPU处理完gSignal之前的所有命令
+        mCommandQueue->Signal(mFence.Get(), mCurrentFence);
+    }
+    else if(mDeferred) //如果说走延迟的话
+    {
+        mCommandList->OMSetRenderTargets(4, &tempGbuffer, true, &tempDsv);
+
+        ID3D12DescriptorHeap* descriptorHeaps[] = { mSrvHeap.Get() };
+        mCommandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+
+        mCommandList->SetGraphicsRootSignature(mGBSignature.Get());
+
+        UINT passCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
+
+        //使用根描述符的CBV 最新的
+        auto passCB = mCurrFrameResource->PassCB->Resource();
+        mCommandList->SetGraphicsRootConstantBufferView(0, passCB->GetGPUVirtualAddress());
+
+        auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
+        mCommandList->SetGraphicsRootShaderResourceView(1, matBuffer->GetGPUVirtualAddress());
+
+        mCommandList->SetGraphicsRootDescriptorTable(3, mSrvHeap->GetGPUDescriptorHandleForHeapStart());
+
+        //此下面开始绘制物体部分，阴影看你吧，也可以写个真实的阴影生成，上面那个阴影太抽象了
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
+
+
+    }
 }
 
 void ShapesApp::OnMouseDown(WPARAM btnState, int x, int y)
@@ -897,7 +931,7 @@ void ShapesApp::BuildGbufferRootSignature()
     gbRootParameter[0].InitAsConstantBufferView(1);//PASSCB
     gbRootParameter[1].InitAsShaderResourceView(0, 1);//Mat(t0,space1)
     gbRootParameter[2].InitAsShaderResourceView(1, 1);//Instance(t1,space1)
-    gbRootParameter[3].InitAsDescriptorTable(4, &gbTable, D3D12_SHADER_VISIBILITY_PIXEL);
+    gbRootParameter[3].InitAsDescriptorTable(4, &gbTable, D3D12_SHADER_VISIBILITY_ALL);
 
     //采样器
     auto samplers = GetStaticSamplers();
@@ -920,7 +954,34 @@ void ShapesApp::BuildGbufferRootSignature()
         serializedRootSig->GetBufferSize(),
         IID_PPV_ARGS(mGBSignature.GetAddressOf())));
 }
+void ShapesApp::BuildLightApplyRootSignature()
+{
+    CD3DX12_DESCRIPTOR_RANGE laTable;
+    laTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 0, 0);
 
+    CD3DX12_ROOT_PARAMETER laRootParameter[1];
+    laRootParameter[0].InitAsDescriptorTable(4, &laTable, D3D12_SHADER_VISIBILITY_PIXEL);
+
+    auto samplers = GetStaticSamplers();
+
+    CD3DX12_ROOT_SIGNATURE_DESC laRootSigDesc(1, laRootParameter, (UINT)samplers.size(), samplers.data(),
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+    ComPtr<ID3DBlob> serializedRootSig = nullptr;
+    ComPtr<ID3DBlob> errorBlob = nullptr;
+    ThrowIfFailed(D3D12SerializeRootSignature(&laRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf()));
+
+    if (errorBlob != nullptr)
+    {
+        ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+    }
+
+    ThrowIfFailed(mDevice->CreateRootSignature(
+        0,
+        serializedRootSig->GetBufferPointer(),
+        serializedRootSig->GetBufferSize(),
+        IID_PPV_ARGS(mLASignature.GetAddressOf())));
+}
 void ShapesApp::BuildRootSignature()
 {
     CD3DX12_DESCRIPTOR_RANGE texTable;
@@ -939,7 +1000,7 @@ void ShapesApp::BuildRootSignature()
     // 根参数.
     CD3DX12_ROOT_PARAMETER slotRootParameter[5];
 
-    slotRootParameter[0].InitAsConstantBufferView(0); //OBJ
+    slotRootParameter[0].InitAsConstantBufferView(0); //OBJ --没用了来着.只是改了的话有点麻烦. 12.24
     slotRootParameter[1].InitAsConstantBufferView(1); //PASS 
     slotRootParameter[2].InitAsShaderResourceView(0, 1); //MATERIAL
     slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); //TEX
@@ -1393,6 +1454,11 @@ void ShapesApp::BuildGbufferPSOs()
 
     ThrowIfFailed(mDevice->CreateGraphicsPipelineState(&gBufferPsoDesc, IID_PPV_ARGS(&mPSOs["Gbuffer"])));
     
+}
+void ShapesApp::BuildLightApplyPSOs()
+{
+
+
 }
 
 void ShapesApp::BuildPSOs()

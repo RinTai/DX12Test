@@ -1,19 +1,6 @@
 #include "TextureBuffer.h"
 
-TextureBuffer::TextureBuffer(ID3D12Device* device,
-	UINT width, UINT height,
-	DXGI_FORMAT format)
-{
-	mDevice = device;
-
-	mWidth = width;
-	mHeight = height;
-	mFormat = format;
-
-	BuildResource();
-}
-
-ID3D12Resource *TextureBuffer::Resource()
+ID3D12Resource *TextureBuffer::Resource()const
 {
 	return mtexBuffer0.Get();
 }
@@ -85,7 +72,7 @@ void TextureBuffer::BuildResource()
 	texDesc.SampleDesc.Count = 1;
 	texDesc.SampleDesc.Quality = 0;
 	texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	texDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
 	CD3DX12_HEAP_PROPERTIES temp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 	ThrowIfFailed(mDevice->CreateCommittedResource(
@@ -103,5 +90,6 @@ void TextureBuffer::BuildResource()
 		D3D12_RESOURCE_STATE_COMMON,
 		nullptr,
 		IID_PPV_ARGS(&mtexBuffer1)));
-
+	
+	
 }

@@ -119,6 +119,8 @@ public:
     FrameResource& operator=(const FrameResource& rhs) = delete;
     ~FrameResource();
 
+    D3D12_CPU_DESCRIPTOR_HANDLE GbufferView() const;
+
     //每一帧自己的命令分配器
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> CmdListAlloc;
 

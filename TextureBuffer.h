@@ -8,7 +8,16 @@ class TextureBuffer
 {
 public:
 	//构造
-	TextureBuffer(ID3D12Device* device, UINT width, UINT height, DXGI_FORMAT format);
+	TextureBuffer(ID3D12Device* device, UINT width, UINT height, DXGI_FORMAT format)
+	{
+		mDevice = device;
+
+		mWidth = width;
+		mHeight = height;
+		mFormat = format;
+
+		BuildResource();
+	}
 
 	TextureBuffer(const TextureBuffer& rhs) = delete;
 	TextureBuffer operator=(const TextureBuffer& rhs) = delete;
@@ -24,7 +33,7 @@ public:
 		}
 	}
 
-	ID3D12Resource* Resource();
+	ID3D12Resource* Resource()const;
 
 	void BuildDescriptor(
 		CD3DX12_CPU_DESCRIPTOR_HANDLE hCpuDescriptor,
