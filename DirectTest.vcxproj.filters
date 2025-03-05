@@ -57,6 +57,12 @@
     <ClInclude Include="DDSTextureLoader.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="Lights.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Shadow.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dxApp.cpp">
@@ -95,6 +101,12 @@
     <ClCompile Include="DDSTextureLoader.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="Lights.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Shadow.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="LightUtils.hlsl">
@@ -110,6 +122,9 @@
       <Filter>资源文件\Shader</Filter>
     </FxCompile>
     <FxCompile Include="Gbuffer.hlsl">
+      <Filter>资源文件\Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="BlackHole.hlsl">
       <Filter>资源文件\Shader</Filter>
     </FxCompile>
   </ItemGroup>

@@ -54,7 +54,7 @@ SamplerState gsamLinearClamp      : register(s3);
 SamplerState gsamAnisotropicWrap  : register(s4);
 SamplerState gsamAnisotropicClamp : register(s5);
 
-cbuffer obPass : register(b0)
+/*cbuffer obPass : register(b0)
 {
      float4x4 gWorld;
 	float4x4 gTexTransform;
@@ -62,8 +62,8 @@ cbuffer obPass : register(b0)
 	uint gObjPad0;
 	uint gObjPad1;
 	uint gObjPad2;
-}
-cbuffer cbPass : register(b1)
+}*/
+cbuffer cbPass : register(b0)
 {
 //推导一下V矩阵和P矩阵呢
     float4x4 M;
@@ -131,7 +131,7 @@ float4 PSMain(PSInput input) : SV_TARGET
 {  
 
     //这里要更改 11.3
-  MaterialData matData = gMaterialData[gMaterialIndex];
+  MaterialData matData = gMaterialData[input.MatIndex];
 	float4 diffuseAlbedo = matData.DiffuseAlbedo;
 	float3 fresnelR0 = matData.FresnelR0;
 	float  roughness = matData.Roughness;
@@ -175,7 +175,7 @@ float4 PSMain(PSInput input) : SV_TARGET
     // Common convention to take alpha from diffuse albedo.
     litColor.a = diffuseAlbedo.a;
 
-    float temp = (float) gMaterialIndex / 4.0f;
+    float temp = (float) input.MatIndex / 4.0f;
     return litColor;
 
 }

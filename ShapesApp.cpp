@@ -14,6 +14,10 @@
 // 
 // 想做成延迟渲染，或者只是绘制阴影图？感觉工作量好大
 // 添加后处理效果中，是屏幕像素化的后处理，感觉还是得自己写管线 -11.19 
+// 
+// 摸了 -2.17
+// 
+// 转另一个去了 再见 - 3.5
 //***************************************************************************************
 #include "d3dUtil.h"
 #include "dxApp.h"
@@ -286,8 +290,14 @@ bool ShapesApp::Initialize()
     BuildRootSignature();
     BuildShadersAndInputLayout();
     //BuildShapeGeometry();
+
+    //BuildGbufferRootSignature();
+    //BuildGbufferPSOs();
+    //BuildLightApplyPSOs();
+    //BuildLightApplyRootSignature();
+
     BuildRoomGeometry();
-    BuildSkullGeometry();
+    BuildSkullGeometry(); //把这个恶心的骷髅给我删了
     BuildMaterial();
     BuildRenderItems();
     BuildFrameResources();
@@ -320,7 +330,7 @@ void ShapesApp::OnResize()
 
 void ShapesApp::Update(const GameTimer& gt)
 {
-    OnKeyboardInput(gt);
+    OnKeyboardInput(gt); 
     //UpdateCamera(gt);
 
   
@@ -401,12 +411,12 @@ void ShapesApp::Draw(const GameTimer& gt)
 
         //使用根描述符的CBV 最新的
         auto passCB = mCurrFrameResource->PassCB->Resource();
-        mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootConstantBufferView(0, passCB->GetGPUVirtualAddress());
 
         auto matBuffer = mCurrFrameResource->MaterialBuffer->Resource();
-        mCommandList->SetGraphicsRootShaderResourceView(2, matBuffer->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootShaderResourceView(1, matBuffer->GetGPUVirtualAddress());
 
-        mCommandList->SetGraphicsRootDescriptorTable(3, mSrvHeap->GetGPUDescriptorHandleForHeapStart());
+        mCommandList->SetGraphicsRootDescriptorTable(2, mSrvHeap->GetGPUDescriptorHandleForHeapStart());
 
         DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
 
@@ -420,12 +430,12 @@ void ShapesApp::Draw(const GameTimer& gt)
         //只绘制镜子范围的镜像（标记为1的）
         // 使用两个单独的渲染过程常量缓冲区，一个存储物体镜像，另一个保存光照镜像（这个镜子的实现实际上是画了两个骷髅头，用模板测试的方法来剔除一部分）
 
-        mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress() + 1 * passCBByteSize);
+        mCommandList->SetGraphicsRootConstantBufferView(0, passCB->GetGPUVirtualAddress() + 1 * passCBByteSize);
         mCommandList->SetPipelineState(mPSOs["drawStencilReflections"].Get());
         DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Reflected]);
 
         //恢复主渲染过程
-        mCommandList->SetGraphicsRootConstantBufferView(1, passCB->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootConstantBufferView(0, passCB->GetGPUVirtualAddress());
         mCommandList->OMSetStencilRef(0);
 
         //绘制镜面，使他与镜像混合
@@ -481,7 +491,33 @@ void ShapesApp::Draw(const GameTimer& gt)
         //此下面开始绘制物体部分，阴影看你吧，也可以写个真实的阴影生成，上面那个阴影太抽象了
         DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
 
+        mCommandList->SetPipelineState(mPSOs["highlight"].Get());
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Highlight]);
+        //把模板缓冲区标记为1
+        mCommandList->OMSetStencilRef(1);
+        mCommandList->SetPipelineState(mPSOs["markStencilMirrors"].Get());
 
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Mirrors]);
+        //只绘制镜子范围的镜像（标记为1的）
+        // 使用两个单独的渲染过程常量缓冲区，一个存储物体镜像，另一个保存光照镜像（这个镜子的实现实际上是画了两个骷髅头，用模板测试的方法来剔除一部分）
+
+        mCommandList->SetGraphicsRootConstantBufferView(0, passCB->GetGPUVirtualAddress() + 1 * passCBByteSize);
+        mCommandList->SetPipelineState(mPSOs["drawStencilReflections"].Get());
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Reflected]);
+
+        //恢复主渲染过程
+        mCommandList->SetGraphicsRootConstantBufferView(0, passCB->GetGPUVirtualAddress());
+        mCommandList->OMSetStencilRef(0);
+
+        //绘制镜面，使他与镜像混合
+        mCommandList->SetPipelineState(mPSOs["transparent"].Get());
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Transparent]);
+
+        //绘制阴影
+        mCommandList->SetPipelineState(mPSOs["shadow"].Get());
+        DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Shadow]);
+
+        //此处应该是到达光照处理阶段。
     }
 }
 
@@ -924,14 +960,14 @@ void ShapesApp::LoadTexture()
 
 void ShapesApp::BuildGbufferRootSignature()
 {
-    CD3DX12_DESCRIPTOR_RANGE gbTable;
-    gbTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 0, 0);//(t0,space0)
+    CD3DX12_DESCRIPTOR_RANGE gbTable; //传入Gbuffer的纹理们 
+    gbTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 0, 0);//Tes(t0,space0)
 
     CD3DX12_ROOT_PARAMETER gbRootParameter[4];//和下面一样的要放进去 但是可以把常量删了
-    gbRootParameter[0].InitAsConstantBufferView(1);//PASSCB
+    gbRootParameter[0].InitAsConstantBufferView(0);//PASSCB
     gbRootParameter[1].InitAsShaderResourceView(0, 1);//Mat(t0,space1)
     gbRootParameter[2].InitAsShaderResourceView(1, 1);//Instance(t1,space1)
-    gbRootParameter[3].InitAsDescriptorTable(4, &gbTable, D3D12_SHADER_VISIBILITY_ALL);
+    gbRootParameter[3].InitAsDescriptorTable(1, &gbTable, D3D12_SHADER_VISIBILITY_ALL);
 
     //采样器
     auto samplers = GetStaticSamplers();
@@ -959,6 +995,7 @@ void ShapesApp::BuildLightApplyRootSignature()
     CD3DX12_DESCRIPTOR_RANGE laTable;
     laTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 4, 0, 0);
 
+    //4个图放进去
     CD3DX12_ROOT_PARAMETER laRootParameter[1];
     laRootParameter[0].InitAsDescriptorTable(4, &laTable, D3D12_SHADER_VISIBILITY_PIXEL);
 
@@ -998,13 +1035,13 @@ void ShapesApp::BuildRootSignature()
     srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);*/
 
     // 根参数.
-    CD3DX12_ROOT_PARAMETER slotRootParameter[5];
+    CD3DX12_ROOT_PARAMETER slotRootParameter[4];
 
-    slotRootParameter[0].InitAsConstantBufferView(0); //OBJ --没用了来着.只是改了的话有点麻烦. 12.24
-    slotRootParameter[1].InitAsConstantBufferView(1); //PASS 
-    slotRootParameter[2].InitAsShaderResourceView(0, 1); //MATERIAL
-    slotRootParameter[3].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); //TEX
-    slotRootParameter[4].InitAsShaderResourceView(1 , 1); //INSTANCE
+    //slotRootParameter[0].InitAsConstantBufferView(0); //OBJ --没用了来着.只是改了的话有点麻烦. 12.24 改了 12.25
+    slotRootParameter[0].InitAsConstantBufferView(0); //PASSCB
+    slotRootParameter[1].InitAsShaderResourceView(0, 1); //MATERIALCB
+    slotRootParameter[2].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL); //TEX
+    slotRootParameter[3].InitAsShaderResourceView(1 , 1); //INSTANCECB
 
     // 创建CBV的根参数
      //slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
@@ -1015,7 +1052,7 @@ void ShapesApp::BuildRootSignature()
     auto samplers = GetStaticSamplers();
 
     //中间这个是sampler数量
-    CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter,(UINT)samplers.size(), samplers.data(),
+    CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,(UINT)samplers.size(), samplers.data(),
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
     ComPtr<ID3DBlob> serializedRootSig = nullptr;
@@ -1051,6 +1088,8 @@ void ShapesApp::BuildShadersAndInputLayout()
 
     mShaders["standardVS"] = d3dUtil::CompileShader(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\testShader.hlsl", nullptr, "VSMain", "vs_5_1");
     mShaders["opaquePS"] = d3dUtil::CompileShader(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\testShader.hlsl", nullptr, "PSMain", "ps_5_1");
+    //mShaders["GbufferVS"] = d3dUtil::CompileShader(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\Gbuffer.hlsl", nullptr, "VSGbuffer", "ps_5_1");
+    //mShaders["GbufferPS"] = d3dUtil::CompileShader(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\Gbuffer.hlsl", nullptr, "PSGbuffer", "ps_5_1");
 
     mInputLayout =
     {
@@ -1309,6 +1348,7 @@ void ShapesApp::BuildShapeGeometry()
     mGeometries[geo->Name] = std::move(geo);
 }
 
+//已废弃
 void ShapesApp::BuildSkullGeometry()
 {
     std::ifstream fin(L"C:\\Users\\qaze6\\Pictures\\skull.txt");
@@ -1426,13 +1466,17 @@ void ShapesApp::BuildGbufferPSOs()
     //RTV深度在DSV里就画了，但是光源的Shadow还是需要一个PSO的
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC gBufferPsoDesc;
+    gBufferPsoDesc.InputLayout = { mInputLayout.data(), (UINT)mInputLayout.size() };
+    gBufferPsoDesc.pRootSignature = mGBSignature.Get();
+    gBufferPsoDesc.VS = CD3DX12_SHADER_BYTECODE(mShaders["GbufferVS"].Get());
+    gBufferPsoDesc.PS = CD3DX12_SHADER_BYTECODE(mShaders["GbufferPS"].Get());
     gBufferPsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     gBufferPsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
     gBufferPsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     gBufferPsoDesc.SampleMask = UINT_MAX;
     gBufferPsoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE; // 绘制三角形
 
-    gBufferPsoDesc.NumRenderTargets = 4;  //法线 位置 颜色 深度
+    gBufferPsoDesc.NumRenderTargets = 4;  //法线 位置 颜色 深度 GB的输出
     gBufferPsoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;//法线
     gBufferPsoDesc.RTVFormats[1] = DXGI_FORMAT_R32G32B32A32_FLOAT;//位置
     gBufferPsoDesc.RTVFormats[2] = DXGI_FORMAT_R8G8B8A8_UNORM;//颜色
@@ -1659,6 +1703,7 @@ void ShapesApp::BuildMaterial()
     icemirror->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
     icemirror->Roughness = 0.5f;
 
+    //这两个材质也用不上了
     auto skullMat = std::make_unique<Material>();
     skullMat->Name = "skullMat";
     skullMat->MatCBIndex = 3;
@@ -1755,7 +1800,7 @@ void ShapesApp::BuildRenderItems()
     mSkullRitem = skullRitem.get();
     mRitemLayer[(int)RenderLayer::Opaque].push_back(skullRitem.get());
     
-
+    
     // Reflected skull will have different world matrix, so it needs to be its own render item.
     auto reflectedSkullRitem = std::make_unique<RenderItem>();
     *reflectedSkullRitem =  *skullRitem; //这里报错了 11.5
@@ -1769,7 +1814,10 @@ void ShapesApp::BuildRenderItems()
     shadowedSkullRitem->ObjCBIndex = 4;
     shadowedSkullRitem->Mat = mMaterials["shadowMat"].get();
     mShadowedSkullRitem = shadowedSkullRitem.get();
+    //Zhe li de Material Mei Huan. (Fan zheng yihou yao shan diao zhege jiuxianzheyangba)
+    mShadowedSkullRitem->Instances[0].MaterialIndex = 4;
     mRitemLayer[(int)RenderLayer::Shadow].push_back(shadowedSkullRitem.get());
+    
 
     auto mirrorRitem = std::make_unique<RenderItem>();
     mirrorRitem->World = MathHelper::Identity4x4();
@@ -1856,14 +1904,14 @@ void ShapesApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::v
 
         //书上是写在Frame中的，但是在Frame中不是普遍情况，所以在此我写在Ritem中，来保证每个渲染物体组能有一个自己的缓冲区，就是不知道能不能成功
         auto instanceBuffer = ri->InstanceBuffer->Resource();
-        cmdList->SetGraphicsRootShaderResourceView(4, instanceBuffer->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootShaderResourceView(3, instanceBuffer->GetGPUVirtualAddress());
         D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress() + ri->ObjCBIndex * objCBByteSize;//11.5
         //D3D12_GPU_VIRTUAL_ADDRESS matCBAddress = matCB->GetGPUVirtualAddress() + ri->Mat->MatCBIndex * matCBByteSize; //10.31
 
         //cmdList->SetGraphicsRootDescriptorTable(0, cbvHandle); 
         //cmdList->SetGraphicsRootDescriptorTable(2, srvHandle);
 
-        cmdList->SetGraphicsRootConstantBufferView(0, objCBAddress);//物体的CB（0） PassCB（1） 11.5
+        //cmdList->SetGraphicsRootConstantBufferView(0, objCBAddress);//物体的CB（0） PassCB（1） 11.5  改了 12.25
         //cmdList->SetGraphicsRootConstantBufferView(2, matCBAddress);//材质CB（2 //10.31
         //cmdList->SetGraphicsRootDescriptorTable(3, tex);//SRV 放在(3) //10.31
 

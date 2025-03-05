@@ -1,16 +1,6 @@
 
-//这里弄成InstanceData 结构体
-cbuffer obPass : register(b0)
-{
-    float4x4 gWorld;
-    float4x4 gTexTransform;
-    uint gMaterialIndex;
-    uint gObjPad0;
-    uint gObjPad1;
-    uint gObjPad2;
-}
 //不变
-cbuffer cbPass : register(b1)
+cbuffer cbPass : register(b0)
 {
 //推导一下V矩阵和P矩阵呢
     float4x4 M;
@@ -36,6 +26,28 @@ cbuffer cbPass : register(b1)
 
 */
 
+struct MaterialData
+{
+    float4 DiffuseAlbedo;
+    float3 FresnelR0;
+    float Roughness;
+    float4x4 MatTransform;
+    uint DiffuseMapIndex;
+    uint MatPad0;
+    uint MatPad1;
+    uint MatPad2;
+};
+
+struct InstanceData
+{
+    float4x4 World;
+    float4x4 TexTransform;
+    uint MaterialIndex;
+    uint InstPad0;
+    uint InstPad1;
+    uint InstPad2;
+};
+
 Texture2D gDiffuseMap[4] : register(t0);
 
 SamplerState gsamPointWrap : register(s0);
@@ -54,16 +66,21 @@ SamplerState gsamAnisotropicClamp : register(s5);
 };
 
 StructuredBuffer<GbufferConstant> GbufferData : register(b0);*/
+StructuredBuffer<MaterialData> gMaterialData : register(t0, space1);
+StructuredBuffer<InstanceData> gInstanceData : register(t1, space1);
 
 struct VSIn
 {
     float4 Pos : POSITIONT;
     float4 Normal : NORMAL;
     float2 UV : TEXCOORD0;
+
 };
 
 struct VSOut
 {
+    nointerpolation uint MatIndex : MATINDEX;
+    
     float4 CPos : SV_Position;
     float4 WPos : POSITION;
     float4 Normal : NORMAL;
@@ -78,19 +95,27 @@ struct PSOut
     float Depth : SV_TARGET3;
 };
 
-VSOut VSGbuffer(VSIn varying)
+VSOut VSGbuffer(VSIn varying, uint instanceID : SV_InstanceID)
 {
+    
+    InstanceData instanceData = gInstanceData[instanceID];
+    MaterialData matData = gMaterialData[instanceData.MaterialIndex];
+    
     VSOut Output;
-    Output.WPos = mul(gWorld, varying.Pos);
+    Output.WPos = mul(instanceData.World, varying.Pos);
     Output.CPos = mul(VP, Output.WPos);
-    Output.Normal = mul(gWorld, varying.Normal);
-    Output.UV = mul(gTexTransform, varying.UV);
+    Output.Normal = mul(instanceData.World, varying.Normal);
+    float4 texC = mul(float4(varying.UV, 0.0f, 1.0f), instanceData.TexTransform);
+    Output.UV = mul(texC, matData.MatTransform).xy;
+    Output.MatIndex = instanceData.MaterialIndex;
     
     return Output;
 }
 //下面这个没做完
 PSOut PSGbuffer(VSOut fragment)
 {
+    MaterialData matData = gMaterialData[fragment.MatIndex];
+    
     PSOut Output;
     
     Output.Color = fragment;

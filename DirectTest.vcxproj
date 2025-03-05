@@ -148,7 +148,9 @@
     <ClInclude Include="GameTimer.h" />
     <ClInclude Include="GeometryGenerator.h" />
     <ClInclude Include="LandAndWavesApp.h" />
+    <ClInclude Include="Lights.h" />
     <ClInclude Include="MathHelper.h" />
+    <ClInclude Include="Shadow.h" />
     <ClInclude Include="ShapesApp.h" />
     <ClInclude Include="TextureBuffer.h" />
     <ClInclude Include="UploadBuffer.h" />
@@ -162,12 +164,20 @@
     <ClCompile Include="GameTimer.cpp" />
     <ClCompile Include="GeometryGenerator.cpp" />
     <ClCompile Include="LandAndWavesApp.cpp" />
+    <ClCompile Include="Lights.cpp" />
     <ClCompile Include="MathHelper.cpp" />
+    <ClCompile Include="Shadow.cpp" />
     <ClCompile Include="ShapesApp.cpp" />
     <ClCompile Include="TextureBuffer.cpp" />
     <ClCompile Include="UploadBuffer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="BlackHole.hlsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </FxCompile>
     <FxCompile Include="Gbuffer.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
