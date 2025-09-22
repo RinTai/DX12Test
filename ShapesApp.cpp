@@ -17,7 +17,7 @@
 // 
 // 摸了 -2.17
 // 
-// 转另一个去了 再见 - 3.5
+// 转另一个去了 再见,当然还是在这个文件里面 可以去看blackHolE - 3.5
 //***************************************************************************************
 #include "d3dUtil.h"
 #include "dxApp.h"
@@ -288,11 +288,11 @@ bool ShapesApp::Initialize()
 
     LoadTexture();
     BuildRootSignature();
+    BuildGbufferRootSignature();
     BuildShadersAndInputLayout();
     //BuildShapeGeometry();
 
-    //BuildGbufferRootSignature();
-    //BuildGbufferPSOs();
+    BuildGbufferPSOs();
     //BuildLightApplyPSOs();
     //BuildLightApplyRootSignature();
 
@@ -651,6 +651,7 @@ void ShapesApp::UpdateObjectCBs(const GameTimer& gt)
         }
     }
 }
+
 void ShapesApp::UpdateInstanceData(const GameTimer& gt)
 {
     XMMATRIX view = mCamera.GetView();
@@ -803,7 +804,9 @@ void ShapesApp::UpdateReflectedPassCB(const GameTimer& gt)
     currPassCB->CopyData(1, mReflectedPassCB);
 }
 
-//这里修改了一下来使用SRV
+/// <summary>
+/// /这里修改了一下来使用SRV 
+/// </summary>
 void ShapesApp::BuildDescriptorHeaps()
 {
     UINT objCount =  (UINT)mRitemLayer[(int)RenderLayer::Opaque].size();
@@ -922,6 +925,7 @@ void ShapesApp::BuildConstantBufferViews()
         mDevice->CreateConstantBufferView(&cbvDesc, handle);
     }       
 }
+
 void ShapesApp::LoadTexture()
 {
     auto bricksTex = std::make_unique<Texture>();
@@ -990,6 +994,7 @@ void ShapesApp::BuildGbufferRootSignature()
         serializedRootSig->GetBufferSize(),
         IID_PPV_ARGS(mGBSignature.GetAddressOf())));
 }
+
 void ShapesApp::BuildLightApplyRootSignature()
 {
     CD3DX12_DESCRIPTOR_RANGE laTable;
@@ -1019,6 +1024,7 @@ void ShapesApp::BuildLightApplyRootSignature()
         serializedRootSig->GetBufferSize(),
         IID_PPV_ARGS(mLASignature.GetAddressOf())));
 }
+
 void ShapesApp::BuildRootSignature()
 {
     CD3DX12_DESCRIPTOR_RANGE texTable;
@@ -1086,10 +1092,10 @@ void ShapesApp::BuildShadersAndInputLayout()
     //ThrowIfFailed(D3DCompileFromFile(std::wstring(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\testShader.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_1", compileFlags, 0, &mShaders["standardVS"], nullptr));
     //ThrowIfFailed(D3DCompileFromFile(std::wstring(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\testShader.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_1", compileFlags, 0, &mShaders["opaquePS"], nullptr));
 
-    mShaders["standardVS"] = d3dUtil::CompileShader(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\testShader.hlsl", nullptr, "VSMain", "vs_5_1");
-    mShaders["opaquePS"] = d3dUtil::CompileShader(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\testShader.hlsl", nullptr, "PSMain", "ps_5_1");
-    //mShaders["GbufferVS"] = d3dUtil::CompileShader(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\Gbuffer.hlsl", nullptr, "VSGbuffer", "ps_5_1");
-    //mShaders["GbufferPS"] = d3dUtil::CompileShader(L"C:\\Users\\qaze6\\source\\repos\\DirectTest\\Gbuffer.hlsl", nullptr, "PSGbuffer", "ps_5_1");
+    mShaders["standardVS"] = d3dUtil::CompileShader(L"testShader.hlsl", nullptr, "VSMain", "vs_5_1");
+    mShaders["opaquePS"] = d3dUtil::CompileShader(L"testShader.hlsl", nullptr, "PSMain", "ps_5_1");
+    mShaders["GbufferVS"] = d3dUtil::CompileShader(L"Gbuffer.hlsl", nullptr, "VSGbuffer", "vs_5_1");
+    mShaders["GbufferPS"] = d3dUtil::CompileShader(L"Gbuffer.hlsl", nullptr, "PSGbuffer", "ps_5_1");
 
     mInputLayout =
     {
@@ -1677,6 +1683,7 @@ void ShapesApp::BuildFrameResources()
             2, (UINT)mAllRitems.size(),(UINT) mMaterials.size(),(UINT)mClientWidth,(UINT)mClientHeight));
     }
 }
+
 void ShapesApp::BuildMaterial()
 {
     auto bricks = std::make_unique<Material>();
@@ -1736,6 +1743,7 @@ void ShapesApp::BuildMaterial()
     mMaterials["shadowMat"] = std::move(shadowMat);
     mMaterials["highlight0"] = std::move(highlight0);//11.12
 }
+
 void ShapesApp::BuildRenderItems()
 {
     auto floorRitem = std::make_unique<RenderItem>();

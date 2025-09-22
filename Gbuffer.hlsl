@@ -50,6 +50,10 @@ struct InstanceData
 
 Texture2D gDiffuseMap[4] : register(t0);
 
+StructuredBuffer<MaterialData> gMaterialData : register(t0, space1);
+StructuredBuffer<InstanceData> gInstanceData : register(t1, space1);
+
+
 SamplerState gsamPointWrap : register(s0);
 SamplerState gsamPointClamp : register(s1);
 SamplerState gsamLinearWrap : register(s2);
@@ -66,14 +70,13 @@ SamplerState gsamAnisotropicClamp : register(s5);
 };
 
 StructuredBuffer<GbufferConstant> GbufferData : register(b0);*/
-StructuredBuffer<MaterialData> gMaterialData : register(t0, space1);
-StructuredBuffer<InstanceData> gInstanceData : register(t1, space1);
+
 
 struct VSIn
 {
-    float4 Pos : POSITIONT;
-    float4 Normal : NORMAL;
-    float2 UV : TEXCOORD0;
+    float4 Pos : POSITION;
+    float3 Normal : NORMAL;
+    float2 UV : TEXCOORD;
 
 };
 
@@ -81,12 +84,13 @@ struct VSOut
 {
     nointerpolation uint MatIndex : MATINDEX;
     
-    float4 CPos : SV_Position;
+    float4 CPos : SV_POSITION;
     float4 WPos : POSITION;
-    float4 Normal : NORMAL;
-    float2 UV : TEXCOORD0;
+    float3 Normal : NORMAL;
+    float2 UV : TEXCOORD;
 };
 
+//这里有问题 导致不能正常编译 太奇怪了.
 struct PSOut
 {
     float4 Normal : SV_TARGET0;
@@ -97,28 +101,31 @@ struct PSOut
 
 VSOut VSGbuffer(VSIn varying, uint instanceID : SV_InstanceID)
 {
+    VSOut Output;
     
     InstanceData instanceData = gInstanceData[instanceID];
-    MaterialData matData = gMaterialData[instanceData.MaterialIndex];
+    MaterialData matData = gMaterialData[instanceData.MaterialIndex];   
+   
+    Output.MatIndex = instanceData.MaterialIndex;
     
-    VSOut Output;
-    Output.WPos = mul(instanceData.World, varying.Pos);
-    Output.CPos = mul(VP, Output.WPos);
-    Output.Normal = mul(instanceData.World, varying.Normal);
+    Output.WPos = mul(varying.Pos,instanceData.World);
+    Output.CPos = mul(Output.WPos,VP);
+    Output.Normal = mul(varying.Normal, (float3x3) instanceData.World);
     float4 texC = mul(float4(varying.UV, 0.0f, 1.0f), instanceData.TexTransform);
     Output.UV = mul(texC, matData.MatTransform).xy;
-    Output.MatIndex = instanceData.MaterialIndex;
+
     
     return Output;
 }
+
 //下面这个没做完
-PSOut PSGbuffer(VSOut fragment)
+float4 PSGbuffer(VSOut fragment) : SV_Target
 {
     MaterialData matData = gMaterialData[fragment.MatIndex];
     
     PSOut Output;
     
-    Output.Color = fragment;
+    Output.Color = float4(1.0f, 0.0f, 0.0f, 1.0f);
     
     Output.Normal = fragment.Normal;
     
@@ -126,5 +133,7 @@ PSOut PSGbuffer(VSOut fragment)
     
     Output.Depth = fragment.CPos.z;
     
-    return Output;
+    
+    
+    return float4(1.0f, 1.0f, 1.0f, 1.0f);
 }

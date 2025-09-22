@@ -122,6 +122,7 @@ PSInput VSMain(VSInput input,uint instanceID : SV_InstanceID)
     result.normal = mul(input.normal, (float3x3) instanceData.World);
     //result.normal = normal;
 
+    
     return result;
 
 
@@ -174,6 +175,7 @@ float4 PSMain(PSInput input) : SV_TARGET
 
     // Common convention to take alpha from diffuse albedo.
     litColor.a = diffuseAlbedo.a;
+
 
     float temp = (float) input.MatIndex / 4.0f;
     return litColor;
